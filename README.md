@@ -1,4 +1,4 @@
-# 🚀 Windows Automation Suite
+#  Windows Automation
 
 Um conjunto de ferramentas inteligentes desenvolvidas em **Python** e
 **Batch** para automatizar a manutenção do Windows, organizar ficheiros
@@ -27,6 +27,15 @@ Organiza automaticamente os ficheiros da pasta Downloads.
 Documentos, Instaladores, Compactados e Código. - Criação automática de
 subpastas por data (Ano-Mês). - Sistema anti-conflito de nomes. - Pode
 ser convertido para `.pyw` para rodar em segundo plano.
+
+------------------------------------------------------------------------
+------------------------------------------------------------------------
+
+### 📂 Automatização Spotify (`spotify.py`)
+
+Transforma Playlsit e um arquivo Zip.
+
+**Recursos:** - Este script liga-se ao teu Spotify para ler os nomes das músicas da tua playlist. Procura automaticamente essas faixas no YouTube para encontrar a melhor versão de áudio. Descarrega e converte tudo em ficheiros MP3 de alta qualidade de forma automática. No final, organiza e compacta todas as músicas num ficheiro ZIP pronto a usar.
 
 ------------------------------------------------------------------------
 
