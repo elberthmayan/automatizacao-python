@@ -1,4 +1,4 @@
-# 🐍 Python Organizer -- Automation Hub
+a# 🐍 Python Organizer -- Automation Hub
 
 Um projeto em Python que une vários **scripts de automação** em uma
 única aplicação com **interface gráfica (GUI)**, facilitando tarefas
