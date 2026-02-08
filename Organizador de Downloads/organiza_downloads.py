@@ -1,188 +1,186 @@
 import os
 import shutil
 import time
-import ctypes
 import sys
-import traceback
+import platform
 from pathlib import Path
-from datetime import datetime
 
-# --- CONFIGURAÇÃO ---
-NOME_NO_STARTUP = "organizador_downloads_auto.pyw"
+# --- CONFIGURAÇÕES ---
+# Detecta a pasta de Downloads automaticamente (Windows e Linux)
+PASTA_DOWNLOADS = str(Path.home() / "Downloads")
 
-def adicionar_ao_startup():
+# Mapeamento de Extensões para Pastas
+EXTENSOES = {
+    "Imagens": [".jpg", ".jpeg", ".png", ".gif", ".bmp", ".svg", ".webp", ".ico"],
+    "Videos": [".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm"],
+    "Musicas": [".mp3", ".wav", ".aac", ".flac", ".ogg", ".wma"],
+    "Documentos": [".pdf", ".doc", ".docx", ".txt", ".xls", ".xlsx", ".ppt", ".pptx", ".csv"],
+    "Compactados": [".zip", ".rar", ".7z", ".tar", ".gz", ".bz2"],
+    "Executaveis": [".exe", ".msi", ".bat", ".sh", ".deb", ".AppImage", ".apk"],
+    "ISOs": [".iso", ".img"],
+    "Codigos": [".py", ".js", ".html", ".css", ".cpp", ".java", ".json", ".sql"],
+    "Torrents": [".torrent"]
+}
+
+# Extensões temporárias de navegadores (NÃO MEXER NESTES ARQUIVOS)
+EXTENSOES_TEMP = [".crdownload", ".part", ".tmp", ".download"]
+
+def arquivo_esta_pronto(caminho_arquivo):
     """
-    Gerencia a instalação no Startup.
-    Agora pergunta SEMPRE se quer configurar a inicialização,
-    para permitir testar se a cópia está funcionando.
+    Verifica se o arquivo terminou de ser baixado.
+    Lógica:
+    1. Não pode ter extensão temporária.
+    2. O tamanho do arquivo deve permanecer estável por X segundos.
     """
-    pasta_startup = os.path.join(os.getenv('APPDATA'), r'Microsoft\Windows\Start Menu\Programs\Startup')
-    caminho_destino = os.path.join(pasta_startup, NOME_NO_STARTUP)
-    caminho_atual = os.path.abspath(__file__)
-
-    # Se já estiver rodando da pasta de startup, não faz nada (apenas segue o fluxo silencioso)
-    if caminho_atual.lower() == caminho_destino.lower():
-        return
-
-    # Mensagem direta como solicitado
-    titulo = "Configurar Inicialização"
-    mensagem = ("Deseja fazer o Organizador iniciar junto com o Windows?\n\n"
-                "Clique em SIM para instalar/atualizar.")
-
-    # 4=Yes/No, 0x40=IconInfo, 0x1000=SystemModal (Fica por cima de tudo)
-    resposta = ctypes.windll.user32.MessageBoxW(0, mensagem, titulo, 4 | 0x40 | 0x1000)
+    nome_arquivo = os.path.basename(caminho_arquivo)
     
-    if resposta == 6: # 6 = Botão Yes/Sim
-        try:
-            # Força a cópia (sobrescreve se existir)
-            shutil.copy2(caminho_atual, caminho_destino)
-            ctypes.windll.user32.MessageBoxW(0, 
-                f"Funcionou! Instalado com sucesso.\n\nO arquivo foi copiado para:\n{pasta_startup}", 
-                "Sucesso", 0x40)
-        except Exception as e:
-            ctypes.windll.user32.MessageBoxW(0, f"Erro ao copiar: {e}", "Erro", 0x10)
-    else:
-        # Feedback visual caso escolha Não
-        ctypes.windll.user32.MessageBoxW(0, "Ok, não será instalado na inicialização.", "Cancelado", 0x40)
+    # 1. Checa se é arquivo temporário de navegador
+    for ext in EXTENSOES_TEMP:
+        if nome_arquivo.endswith(ext):
+            return False
 
-class OrganizadorDownloads:
-    def __init__(self):
-        self.download_path = Path.home() / "Downloads"
-        # Log salvo na própria pasta downloads para fácil acesso
-        self.arquivo_log = self.download_path / "log_organizador_debug.txt"
-        
-        # Mapeamento de extensões
-        self.diretorios = {
-            'Imagens': ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp', '.ico', '.heic'],
-            'Videos': ['.mp4', '.mkv', '.flv', '.avi', '.mov', '.wmv', '.webm'],
-            'Audio': ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a'],
-            'Documentos': ['.pdf', '.doc', '.docx', '.txt', '.xlsx', '.pptx', '.csv', '.odt', '.rtf'],
-            'Instaladores': ['.exe', '.msi', '.dmg', '.pkg', '.deb', '.iso'],
-            'Compactados': ['.zip', '.rar', '.7z', '.tar', '.gz'],
-            'Scripts_Codigos': ['.py', '.pyw', '.js', '.html', '.css', '.cpp', '.java', '.json', '.sql', '.php'],
-            'Design_3D': ['.psd', '.ai', '.blend', '.obj', '.fbx', '.stl']
-        }
-        
-        # Arquivos para ignorar
-        self.ignorar = [
-            '.tmp', '.crdownload', '.part', '.ini', 
-            'desktop.ini', 
-            self.arquivo_log.name, 
-            os.path.basename(__file__),
-            NOME_NO_STARTUP
-        ]
-
-    def registrar_log(self, mensagem):
-        """Log simples com tratamento de erro de encoding."""
-        try:
-            timestamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-            with open(self.arquivo_log, 'a', encoding='utf-8') as f:
-                f.write(f"[{timestamp}] {mensagem}\n")
-        except:
-            pass 
-
-    def obter_pasta_destino(self, arquivo):
-        ext = arquivo.suffix.lower()
-        pasta_categoria = 'Outros'
-        
-        for pasta, extensoes in self.diretorios.items():
-            if ext in extensoes:
-                pasta_categoria = pasta
-                break
-        
-        # Tenta pegar data, se falhar usa data atual
-        try:
-            timestamp_arquivo = arquivo.stat().st_mtime
-            data_arquivo = datetime.fromtimestamp(timestamp_arquivo)
-        except:
-            data_arquivo = datetime.now()
-
-        subpasta_data = data_arquivo.strftime("%Y-%m")
-        return self.download_path / pasta_categoria / subpasta_data
-
-    def mover_arquivo(self, arquivo, destino_pasta):
-        # Cria a pasta se não existir
-        if not destino_pasta.exists():
-            try:
-                destino_pasta.mkdir(parents=True, exist_ok=True)
-            except Exception as e:
-                self.registrar_log(f"ERRO ao criar pasta {destino_pasta}: {e}")
-                return False
-
-        destino_final = destino_pasta / arquivo.name
-        
-        # Lógica de renomeação para não sobrescrever arquivos diferentes
-        contador = 1
-        while destino_final.exists():
-            # Se for EXATAMENTE o mesmo arquivo (tamanho e nome), deleta o da origem (já está organizado)
-            if destino_final.stat().st_size == arquivo.stat().st_size:
-                try:
-                    arquivo.unlink() # Deleta o duplicado na origem
-                    self.registrar_log(f"DUPLICADO REMOVIDO: {arquivo.name}")
-                    return True
-                except:
-                    return False
+    # 2. Checa estabilidade do tamanho (O "Delayzein")
+    try:
+        tamanho_inicial = os.path.getsize(caminho_arquivo)
+        if tamanho_inicial == 0:
+            return False # Arquivo acabou de ser criado (0 bytes)
             
-            # Se for diferente, renomeia
-            destino_final = destino_pasta / f"{arquivo.stem}_{contador}{arquivo.suffix}"
-            contador += 1
+        time.sleep(2) # Espera 2 segundos
+        
+        tamanho_final = os.path.getsize(caminho_arquivo)
+        
+        # Se o tamanho mudou, ainda está baixando
+        if tamanho_inicial != tamanho_final:
+            return False
+            
+        return True
+    except OSError:
+        return False # Arquivo pode estar bloqueado ou sumiu
 
+def configurar_inicializacao():
+    """
+    4. Mágica: Configura o script para iniciar junto com o sistema (Windows/Linux)
+    """
+    sistema = platform.system()
+    caminho_script = os.path.abspath(__file__)
+    
+    if sistema == "Windows":
+        pasta_inicializar = os.path.join(os.getenv('APPDATA'), r"Microsoft\Windows\Start Menu\Programs\Startup")
+        arquivo_bat = os.path.join(pasta_inicializar, "OrganizadorDownloads.bat")
+        
+        if os.path.exists(arquivo_bat):
+            return # Já está configurado
+
+        resposta = input("Deseja que este organizador inicie junto com o Windows? (S/N): ").strip().upper()
+        if resposta == 'S':
+            try:
+                # Cria um arquivo .bat que chama o python para rodar este script
+                with open(arquivo_bat, "w") as bat:
+                    bat.write(f'@echo off\npython "{caminho_script}"')
+                print(f"✅ Configurado para iniciar com o Windows!")
+            except Exception as e:
+                print(f"❌ Erro ao configurar inicialização: {e}")
+
+    elif sistema == "Linux":
+        pasta_autostart = os.path.expanduser("~/.config/autostart")
+        arquivo_desktop = os.path.join(pasta_autostart, "organizador_downloads.desktop")
+        
+        if os.path.exists(arquivo_desktop):
+            return # Já está configurado
+
+        resposta = input("Deseja que este organizador inicie junto com o Linux? (S/N): ").strip().upper()
+        if resposta == 'S':
+            try:
+                if not os.path.exists(pasta_autostart):
+                    os.makedirs(pasta_autostart)
+                
+                conteudo_desktop = f"""[Desktop Entry]
+Type=Application
+Name=Organizador de Downloads
+Exec=python3 "{caminho_script}"
+X-GNOME-Autostart-enabled=true
+"""
+                with open(arquivo_desktop, "w") as f:
+                    f.write(conteudo_desktop)
+                print(f"✅ Configurado para iniciar com o Linux!")
+            except Exception as e:
+                print(f"❌ Erro ao configurar inicialização: {e}")
+
+def organizar():
+    print(f"--- Iniciando Organizador de Downloads ---")
+    print(f"Pasta alvo: {PASTA_DOWNLOADS}")
+    
+    # Tenta configurar inicialização automática na primeira execução
+    configurar_inicializacao()
+    
+    print("\nO script está rodando em segundo plano...")
+    print("Pressione Ctrl+C para parar.\n")
+
+    while True: # Loop infinito para ficar vigiando a pasta
         try:
-            shutil.move(str(arquivo), str(destino_final))
-            self.registrar_log(f"MOVIDO: {arquivo.name} -> {pasta_categoria}/{subpasta_data}") # type: ignore
-            return True
-        except PermissionError:
-            # Arquivo em uso, normal
-            return False
-        except Exception as e:
-            self.registrar_log(f"FALHA ao mover {arquivo.name}: {e}")
-            return False
+            arquivos = [f for f in os.listdir(PASTA_DOWNLOADS) if os.path.isfile(os.path.join(PASTA_DOWNLOADS, f))]
 
-    def limpar_pastas_vazias(self):
-        # Varre apenas as categorias conhecidas para evitar apagar coisas erradas
-        for categoria in self.diretorios.keys():
-            pasta_cat = self.download_path / categoria
-            if pasta_cat.exists():
-                for subpasta in pasta_cat.iterdir():
+            for arquivo in arquivos:
+                caminho_origem = os.path.join(PASTA_DOWNLOADS, arquivo)
+                nome, extensao = os.path.splitext(arquivo)
+                extensao = extensao.lower()
+
+                # Pula o próprio script se ele estiver na pasta Downloads
+                if "organizador_downloads" in nome:
+                    continue
+
+                # Verifica se o arquivo está pronto para ser movido
+                if not arquivo_esta_pronto(caminho_origem):
+                    continue
+
+                moved = False
+                for pasta, exts in EXTENSOES.items():
+                    if extensao in exts:
+                        pasta_destino = os.path.join(PASTA_DOWNLOADS, pasta)
+                        
+                        # Cria a pasta se não existir
+                        if not os.path.exists(pasta_destino):
+                            os.makedirs(pasta_destino)
+                            print(f"📁 Pasta criada: {pasta}")
+
+                        caminho_destino = os.path.join(pasta_destino, arquivo)
+
+                        # Evita sobrescrever arquivos com mesmo nome (adiciona numero)
+                        contador = 1
+                        while os.path.exists(caminho_destino):
+                            novo_nome = f"{nome}_{contador}{extensao}"
+                            caminho_destino = os.path.join(pasta_destino, novo_nome)
+                            contador += 1
+
+                        try:
+                            shutil.move(caminho_origem, caminho_destino)
+                            print(f"✅ Movido: {arquivo} -> {pasta}")
+                            moved = True
+                        except Exception as e:
+                            print(f"❌ Erro ao mover {arquivo}: {e}")
+                        
+                        break # Sai do loop de extensões se já moveu
+                
+                # Se não se encaixou em nenhuma categoria, vai para "Outros"
+                if not moved and arquivo_esta_pronto(caminho_origem):
+                    pasta_destino = os.path.join(PASTA_DOWNLOADS, "Outros")
+                    if not os.path.exists(pasta_destino):
+                        os.makedirs(pasta_destino)
+                    
+                    caminho_destino = os.path.join(pasta_destino, arquivo)
                     try:
-                        if subpasta.is_dir() and not any(subpasta.iterdir()):
-                            subpasta.rmdir()
-                    except: pass
+                        shutil.move(caminho_origem, caminho_destino)
+                        print(f"📦 Movido para Outros: {arquivo}")
+                    except:
+                        pass
+        except Exception as e:
+            print(f"Erro no loop principal: {e}")
 
-    def ciclo_organizacao(self):
-        """Um ciclo único de verificação."""
-        if not self.download_path.exists(): return
-
-        for item in self.download_path.iterdir():
-            if not item.is_file(): continue
-            if item.name.startswith('.') or item.name in self.ignorar: continue
-            if item.suffix.lower() in ['.tmp', '.crdownload', '.part']: continue # Ignora downloads ativos
-
-            try:
-                pasta_destino = self.obter_pasta_destino(item)
-                # A função mover agora trata erros internamente
-                self.mover_arquivo(item, pasta_destino)
-            except Exception as e:
-                self.registrar_log(f"Erro crítico no arquivo {item.name}: {e}")
-
-        self.limpar_pastas_vazias()
-
-    def monitorar(self):
-        self.registrar_log("--- SERVIÇO INICIADO (V3.0) ---")
-        
-        while True:
-            try:
-                self.ciclo_organizacao()
-            except Exception as e:
-                # Se der erro global, loga e continua vivo
-                self.registrar_log(f"CRASH NO CICLO: {traceback.format_exc()}")
-            
-            time.sleep(10) # Verifica a cada 10 segundos
+        # Espera um pouco antes de verificar a pasta novamente para não fritar a CPU
+        time.sleep(5) 
 
 if __name__ == "__main__":
-    # Tenta instalar/atualizar
-    adicionar_ao_startup()
-    
-    # Inicia o serviço
-    app = OrganizadorDownloads()
-    app.monitorar()
+    try:
+        organizar()
+    except KeyboardInterrupt:
+        print("\n🛑 Organizador finalizado pelo usuário.")
